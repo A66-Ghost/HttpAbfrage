@@ -52,6 +52,8 @@
 				var data = window.localStorage.getItem("SonoffDevices");
 				if (data)
 				{	devices = JSON.parse(data);
+					for (i = 0; i < devices.length; i++) 
+						devices[i].inUse = 0;
 				}
 			}
 			if (devices.length < 1 )
@@ -71,6 +73,9 @@
 //----------------------------------------------------------------------
 		function fullReload() {
 			forceList = 1;
+			for (i = 0; i < devices.length; i++) 
+				devices[i].inUse = 0;
+				
 			checkReload();
 		}
 //----------------------------------------------------------------------
@@ -329,16 +334,17 @@
 				if (fldEle) 
 					fldEle.style.backgroundColor 	= "Aquamarine";
 			}
-			console.log (pwrJSON);
+//			console.log (pwrJSON);
 			$.ajax({	url: 		pwrJSON,
 						dataType: 	'json',
 						async: 		true,
 						timeout: 	5000,
 						devId: 		i,
-				success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+				complete: function(e, xhr, settings){
 					devices[this.devId].inUse = 0;
-
+				},		
+				success: function (data,status,xhr) {
+//					console.log (JSON.stringify(data));
 					var sonPower = "OFF";
 					if (devices[i].type == 300)	{
 						if (data.ison)
@@ -376,7 +382,6 @@
 					
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-					devices[this.devId].inUse = 0;
 					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
 
 					if (devices[this.devId].power != 9)
@@ -413,9 +418,11 @@
 						async: 		true,
 						timeout: 	1000,
 						devId: 		i,
-				success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+				complete: function(e, xhr, settings){
 					devices[this.devId].inUse = 0;
+				},		
+				success: function (data,status,xhr) {
+//					console.log (JSON.stringify(data));
 // ---------------
 					var nameId = "sensor" + this.devId;
 					var nameEle = document.getElementById(nameId);
@@ -456,7 +463,6 @@
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
 					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
-					devices[this.devId].inUse = 0;
 				}
 			});
 		}
@@ -472,9 +478,11 @@
 						async: 		true,
 						timeout: 	1000,
 						devId: 		i,
-				success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+				complete: function(e, xhr, settings){
 					devices[this.devId].inUse = 0;
+				},		
+				success: function (data,status,xhr) {
+//					console.log (JSON.stringify(data));
 
 					var sData = "";
 					if (devices[this.devId].dev == 2) {
@@ -498,7 +506,6 @@
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
 					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
-					devices[this.devId].inUse = 0;
 				}
 			});
 		}
@@ -512,7 +519,7 @@
 						timeout: 	1000,
 						devIp: 		Ip,
 				success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+//					console.log (JSON.stringify(data));
 					searchCount	-= 1;
 				
 					if (withOutput == 1) {
@@ -589,7 +596,7 @@
 				$.ajax({	url: 		devJSON,
 							dataType: 	'json',
 					success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+//					console.log (JSON.stringify(data));
 	
 					$('#stage').append("<tr><td>SUCC:" + JSON.stringify(data) + "</td></tr>");
 					
@@ -618,7 +625,7 @@
 						timeout: 	1000,
 						devIp: 		Ip,
 				success: function (data,status,xhr) {
-					console.log (JSON.stringify(data));
+//					console.log (JSON.stringify(data));
 					searchCount	-= 1;
 				
 					for (idx = 0; idx < data.relays.length; ++idx) 
@@ -628,7 +635,7 @@
 							//console.log(appendText);
 							$('#stage').append(appendText);
 						}
-						console.log ( " Found: " + this.devIp + "/1 " + "Shelly"  + "/" + data.name );
+//						console.log ( " Found: " + this.devIp + "/1 " + "Shelly"  + "/" + data.name );
 						devices.push({
 							devName: 		data.relays[idx].name,
 							type: 			300, // Shelly 1
@@ -661,7 +668,7 @@
 						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
 						setTimeout(fullReload, 800);
 					}
-					console.log ( this.devIp + ": " + textStatus + "  " + errorMessage );
+//					console.log ( this.devIp + ": " + textStatus + "  " + errorMessage );
 				}
 			});
 		}
