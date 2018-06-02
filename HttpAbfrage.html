@@ -8,15 +8,11 @@
       </script>
       <script type = "text/javascript" language = "javascript">
 
-		$.ajax.cors = true;
-		
 		// Aufruf: file:///C:/Entw/Arduino/Sonoff/SonoffAbfrage.html?Topic=Keller
 	// C O N F I G ---------------------------------------------------------------------------------------		
 		var ipBasis 		= "192.168.1."; 					// <<< HIER NETZWERK eintragen 		!!!
 		var ipSearchFrom	= 2;
 		var ipSearchTo		= 254;
-		var ipShellySearchFrom	= 2;
-		var ipShellySearchTo	= 254;
 		var ipPass			= "user=admin&password=joker&"		// <<< HIER USER/PASSWORD anpassen 	!!! 
 		var ipAdressen 		= []; 								// Fixe ip's
 		var autoSearch 		= 1;
@@ -30,6 +26,7 @@
 		var forceList		= 1;
 
 		var devices 		= [];
+		var searchIp 		= [];
 		var topics			= [];
 		var actTopic		= "";
 //----------------------------------------------------------------------
@@ -40,7 +37,13 @@
 
 			var htmlText = "<tr><td>" + menuFunction(1) + "</td></tr>";
 			$('#topicStage').html(htmlText);
-				
+
+			for (var i = 0; i < ipSearchTo; i++) {
+				searchIp.push({
+					found: 		0,
+					inUse:		0
+				});
+			}
 			actTopic 			= getParameter( "Topic");
 			var tmpBasis 		= getParameter( "IpBasis");
 			if (tmpBasis) {
@@ -72,6 +75,7 @@
 		}
 //----------------------------------------------------------------------
 		function fullReload() {
+				
 			forceList = 1;
 			for (i = 0; i < devices.length; i++) 
 				devices[i].inUse = 0;
@@ -82,6 +86,10 @@
 		function resetDevices() {
 			devices = [];
 			topics	= [];
+			for (i = 0; i < searchIp.length; i++)  {
+				searchIp[i].found = 0;
+				searchIp[i].inUse = 0;
+			}
 			findDevices(1);
 		}
 //----------------------------------------------------------------------
@@ -99,7 +107,7 @@
 				htmlText += "<tr><td>" //+ devices[i].grouptopic + "/" 
 							+ devices[i].topic + "</td><td>" + devices[i].devName + "</td></tr>" +
 							"<tr><td colspan=2><font size=2>S:" + devices[i].onstate + " L:" + devices[i].sleep + " V:" + devices[i].version +  
-							" W:" + devices[i].devHostName + "/" + devices[i].cfgWifi + "/" + devices[i].ip + "(" + devices[i].dev + ")";
+							" W:" + devices[i].devHostName + "/" +  devices[i].ip + "(" + devices[i].dev + ")";
 				if (devices[i].type == 300)	
 					 htmlText += "<a href='http://" + ipBasis + devices[i].ip + "'>  Shelly  </a></td></tr>";
 				else htmlText += "<a href='http://" + ipBasis + devices[i].ip + "/in?" + ipPass + "'>  info  </a></td></tr>";
@@ -123,13 +131,20 @@
 		}
 //--------------------------------------------------------------------------------------		
 		function checkReload() {
+			for (var i = ipSearchFrom; i < ipSearchTo; i++) {
+				if (searchIp[i].found == 1) {
+					findDevices(0);
+					i  = ipSearchTo;
+				}
+			}	
+
 			if (devices.length > 0 ) {
-				if 	(forceList == 1) {
+				if 	(forceList > 0 ) {
 					forceList		= 0;
 					devices.sort(compareDevice);
 
 					topics = [];
-					for (i = 0; i < devices.length; i++) {
+					for (var i = 0; i < devices.length; i++) {
 						var vTopic = devices[i].topic;
 						if (topics.indexOf(vTopic) < 0) {
 							topics.push(vTopic);
@@ -167,31 +182,17 @@
 			}
 		}
 //--------------------------------------------------------------------------------------		
-		function deviceExists(ip) {
-			for (d = 0; d < devices.length; d++) {
-				if (devices[d].ip == ip) 
-					return 1;
-			}
-			return 0;
-		}
-//--------------------------------------------------------------------------------------		
 		function findDevices(withOutput) {
 			if (withOutput > 0) 
 				$('#stage').html("<tr><td>...suche </td></tr>");
-//		console.log ( " findDevices ");
 
 			findDeviceCount = 0;
 			searchCount = 300;
-			for (i = ipSearchFrom; i < ipSearchTo; i++) {
-				if (deviceExists(i) == 0) {
+			
+			for (var i = ipSearchFrom; i < ipSearchTo; i++) {
+				if (searchIp[i].inUse == 0 && (searchIp[i].found < 2 || searchIp[i].found == 9)) {
 					searchCount += 1;
 					getDevice(i,withOutput);
-				}
-			}
-			for (var s = ipShellySearchFrom; s < ipShellySearchTo; s++) {
-				if (deviceExists(s) == 0) {
-					searchCount += 1;
-					getShellyDevice(s,withOutput);
 				}
 			}
 			searchCount -= 300;
@@ -344,9 +345,10 @@
 					devices[this.devId].inUse = 0;
 				},		
 				success: function (data,status,xhr) {
+					devices[i].inUse = 0;
 //					console.log (JSON.stringify(data));
 					var sonPower = "OFF";
-					if (devices[i].type == 300)	{
+					if (devices[this.devId].type == 300)	{
 						if (data.ison)
 							sonPower = "ON";
 					}
@@ -379,10 +381,10 @@
 					else 	devices[this.devId].power = 0;					
 					
 					setPowerButton(this.devId);	
-					
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
 					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
+					devices[this.devId].inUse = 0;
 
 					if (devices[this.devId].power != 9)
 					{	devices[this.devId].power = 9;
@@ -510,168 +512,132 @@
 			});
 		}
 //-------------------------------------------------------------------
-		function getDevice (Ip,withOutput) {
-			var dmJSON = "http://" + ipBasis + Ip + "/cm?" + ipPass + "cmnd=Status%200";
+		function getDevice (Ip,wo) {
+			if (searchIp[Ip].inUse == 1) return;
+			searchIp[Ip].inUse = 1;
+
+			var deviceUrl = "http://" + ipBasis + Ip;
+			if (searchIp[Ip].found == 1)
+				 deviceUrl += "/settings";
+			else deviceUrl += "/cm?" + ipPass + "cmnd=Status%200";
 			
-			$.ajax({ 	url: 		dmJSON,
-						dataType: 	'json',
+			$.ajax({ 	url: 		deviceUrl,
+						dataType: 	'text',
 						async: 		true,
 						timeout: 	1000,
 						devIp: 		Ip,
+						withOutput:	wo,
 				success: function (data,status,xhr) {
-//					console.log (JSON.stringify(data));
+					searchIp[this.devIp].inUse = 0;
 					searchCount	-= 1;
-				
-					if (withOutput == 1) {
-						var appendText = "<tr><td>Found: " + this.devIp + "/1 " + data.Status.Topic + "/" + data.Status.FriendlyName + "</td></tr>";
-						$('#stage').append(appendText);
+					
+					if (data.startsWith('<body>')) {
+						searchIp[this.devIp].found = 5;
 					}
-					//console.log ( " Found: " + this.devIp + "/1 " + data.Status.Topic + "/" + data.Status.FriendlyName);
-					devices.push({
-						devName: 		data.Status.FriendlyName,
-						type: 			data.Status.Module,
-						power:			data.Status.Power,
-						topic:			data.Status.Topic,
-						onstate:		data.Status.PowerOnState,
-						sleep:			data.StatusPRM.Sleep,
-					//	grouptopic:		data.StatusPRM.GroupTopic,
-						version:		data.StatusFWR.Version,
-						cfgWifi:		data.StatusNET.WifiConfig,
-						devHostName:	data.StatusNET.Hostname,
-					//	option:			data.StatusLOG.SetOption,
-						ip:				this.devIp,
-						inUse:			0,
-//						inUseFunction:	0,
-						dev:			1,
-						state:			1
-						
-					});
-					if (data.Status.Module == 29) {
-						if (withOutput == 1) {
-							var appendText = "<tr><td>Found: " + this.devIp + "/2 " + data.Status.Topic + "/" + data.Status.FriendlyName + "</td></tr>";
-							//console.log(appendText);
+					else if (data.startsWith('{"Status":')) {
+						searchIp[this.devIp].found = 2;
+						var sonoffDevice = JSON.parse(data);
+
+						if (this.withOutput == 1) {
+							var appendText = "<tr><td>Found: " + this.devIp + "/1 " + sonoffDevice.Status.Topic + "/" + sonoffDevice.Status.FriendlyName + "</td></tr>";
 							$('#stage').append(appendText);
 						}
-						devices.push({
-							devName: 		data.Status.FriendlyName + " *2",
-							type: 			data.Status.Module,
-							topic:			data.Status.Topic,
-							onstate:		data.Status.PowerOnState,
-							sleep:			data.StatusPRM.Sleep,
-					//		grouptopic:		data.StatusPRM.GroupTopic,
-							version:		data.StatusFWR.Version,
-							cfgWifi:		data.StatusNET.WifiConfig,
-							devHostName:	data.StatusNET.Hostname,
-							ip:				this.devIp,
-							power:			9,
-							inUse:			0,
-//							inUseFunction:	0,
-							dev:			2,
-							state:			0
-						});
+						setDevice (sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName,sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,1,1);
+
+						if (sonoffDevice.Status.Module == 29) {
+							if (this.withOutput == 1) {
+								var appendText = "<tr><td>Found: " + this.devIp + "/2 " + sonoffDevice.Status.Topic + "/" + sonoffDevice.Status.FriendlyName + "</td></tr>";
+								$('#stage').append(appendText);
+							}
+							setDevice (sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName + "*2",sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,2,0);
+						}
 					}
-					forceList = 1;
-					if (withOutput == 1 && searchCount < 1) {
+					else if (data.startsWith('{"device":')) {
+						searchIp[this.devIp].found = 3;
+						var shellyDevice = JSON.parse(data);
+
+						for (idx = 0; idx < shellyDevice.relays.length; ++idx) 
+						{
+							if (this.withOutput == 1) {
+								var appendText = "<tr><td>Found: " + this.devIp + "/1" + shellyDevice.name  + "/" + shellyDevice.relays[idx].name  + "</td></tr>";
+								$('#stage').append(appendText);
+							}
+							setDevice (shellyDevice.name,shellyDevice.relays[idx].name,300,shellyDevice.relays[idx].ison,0,0,shellyDevice.device.type,shellyDevice.device.hostname,this.devIp,idx,1);
+						}	
+					}	
+					else {
+						if (searchIp[this.devIp].found == 0)
+							 searchIp[this.devIp].found = 1;
+						else searchIp[this.devIp].found = 5;
+					}
+	//				console.log("S:" + this.devIp + " " + searchIp[this.devIp].found);
+					if (this.withOutput == 1 && searchCount < 1) {
 						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
 						setTimeout(fullReload, 800);
 					}	
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
+					searchIp[this.devIp].inUse = 0;
+					if (errorMessage == "timeout") 
+						searchIp[this.devIp].found = 9;
+					else {	
+						if ( searchIp[this.devIp].found == 0)
+							 searchIp[this.devIp].found = 1;
+						else searchIp[this.devIp].found = 5;
+					}	 
+		//			console.log("E:" + this.devIp + " " + searchIp[this.devIp].found + " " + errorMessage);
 					searchCount	-= 1;
-					if (withOutput == 1 && searchCount < 1) {
+					if (this.withOutput == 1 && searchCount < 1) {
 						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
 						setTimeout(fullReload, 800);
 					}
-				//	console.log ( textStatus + "  " + errorMessage );
 				}
 			});
 		}
-//---------------------------------------------------------------------------------------
+//-------------------------------------------------------------------
+		function setDevice (topic,name,type,power,os,sleep,version,hostname,ip,device,state) {
+			for (var i = 0; i < devices.length; i++ ) {
+				if (hostname == devices[i].devHostName && device == devices[i].dev)
+				{
+					devices[i].devName		=		name;
+					devices[i].type			=		type;
+					devices[i].power		=		power;
+					devices[i].topic		=		topic;
+					devices[i].onstate		=		os;
+					devices[i].sleep		=		sleep;
+					devices[i].version		=		version;
+					devices[i].ip			=		ip;
+					devices[i].inUse		=		0;
+					devices[i].state		=		state;
+					return 0;
+				}
+			}
+			devices.push({
+				devName: 		name,
+				type: 			type,
+				power:			power,
+				topic:			topic,
+				onstate:		os,
+				sleep:			sleep,
+				version:		version,
+				devHostName:	hostname,
+				ip:				ip,
+				dev:			device,
+				inUse:			0,
+				state:			state
+			});	
+			forceList = 1;
+			return 1;
+		}
+//---------------------------------------------------------------------------------------------
 // Shelly2 part
 //---------------------------------------------------------------------------------------------
-		function testShelly () {
-					
-			var devJSON = "http://" + ipBasis + 188 + "/settings";
-			$('#stage').html("<tr><td>" + devJSON + "</td></tr><tr><td>" + menuFunction(0) + "</td></tr>");
-				$.ajax({	url: 		devJSON,
-							dataType: 	'json',
-					success: function (data,status,xhr) {
-//					console.log (JSON.stringify(data));
-	
-					$('#stage').append("<tr><td>SUCC:" + JSON.stringify(data) + "</td></tr>");
-					
-				},
-				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-
-					$('#stage').append("<tr><td>ERR:" + textStatus + " " + errorMessage + "</td></tr>");
-				}
-			});
-		}
-//----------------------------------------------------------------------
 //http://192.168.1.188/settings/?mode=relay
 //http://192.168.1.188/settings/?name=Topic
 //http://192.168.1.188/settings/relay/0/?default_state=off
 //http://192.168.1.188/settings/relay/0/?name=Relay 1
 //http://192.168.1.188/settings/relay/1/?default_state=off
 //http://192.168.1.188/settings/relay/1/?name=Relay 2
-//-------------------------------------------------------------------
-		function getShellyDevice (Ip,withOutput) {
-			var devJSON = "http://" + ipBasis + Ip + "/settings";
-			
-			$.ajax({ 	url: 		devJSON,
-						type: 'GET',
-						dataType: 	'json',
-						async: 		true,
-						timeout: 	1000,
-						devIp: 		Ip,
-				success: function (data,status,xhr) {
-//					console.log (JSON.stringify(data));
-					searchCount	-= 1;
-				
-					for (idx = 0; idx < data.relays.length; ++idx) 
-					{
-						if (withOutput == 1) {
-							var appendText = "<tr><td>Found: " + this.devIp + "/1" + data.name  + "/" + data.relays[idx].name  + "</td></tr>";
-							//console.log(appendText);
-							$('#stage').append(appendText);
-						}
-//						console.log ( " Found: " + this.devIp + "/1 " + "Shelly"  + "/" + data.name );
-						devices.push({
-							devName: 		data.relays[idx].name,
-							type: 			300, // Shelly 1
-							power:			data.relays[idx].ison,
-							topic:			data.name,
-							onstate:		0,
-							sleep:			0,
-						//	grouptopic:		data.name,
-							version:		data.device.type,
-							cfgWifi:		"",
-							devHostName:	data.device.hostname,
-						//	option:			data.StatusLOG.SetOption,
-							ip:				this.devIp,
-							inUse:			0,
-	//						inUseFunction:	0,
-							dev:			idx,
-							state:			1
-							
-						});
-					}
-					forceList = 1;
-					if (withOutput == 1 && searchCount < 1) {
-						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
-						setTimeout(fullReload, 800);
-					}	
-				},
-				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-					searchCount	-= 1;
-					if (withOutput == 1 && searchCount < 1) {
-						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
-						setTimeout(fullReload, 800);
-					}
-//					console.log ( this.devIp + ": " + textStatus + "  " + errorMessage );
-				}
-			});
-		}
 //---------------------------------------------------------------------------------------------
       </script>
    </head>

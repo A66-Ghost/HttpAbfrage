@@ -13,5 +13,6 @@ TSL2561,DS18x20
 o) Problem CORS - Security
    (Corss over domain geht mit localer Datei nicht)
 
-Lösung PC:  		FireFox -> AddOn CORS Everywhere installiern und aktivieren beim aufruf dieser Datei
+Lösung PC: 		FireFox -> AddOn CORS Everywhere installiern und aktivieren beim aufruf dieser Datei
+
 Lösung android:  Fully kiosk Browser verwenden
