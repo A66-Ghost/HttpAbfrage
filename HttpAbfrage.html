@@ -8,7 +8,7 @@
       </script>
       <script type = "text/javascript" language = "javascript">
 
-		// Aufruf: file:///C:/Entw/Arduino/Sonoff/SonoffAbfrage.html?Topic=Keller
+		// Aufruf: file:///C:/HttAbfrage/HttAbfrage.html?Topic=Keller
 	// C O N F I G ---------------------------------------------------------------------------------------		
 		var ipBasis 		= "192.168.1."; 					// <<< HIER NETZWERK eintragen 		!!!
 		var ipSearchFrom	= 2;
@@ -16,7 +16,7 @@
 		var ipPass			= "user=admin&password=joker&"		// <<< HIER USER/PASSWORD anpassen 	!!! 
 		var ipAdressen 		= []; 								// Fixe ip's
 		var autoSearch 		= 1;
-		var refreshTime		= 20000;							
+		var refreshTime		= 50000;							
 		var findDeviceLoop 	= 20;
 	// ---------------------------------------------------------------------------------------------------		
 		var findDeviceCount = 0;
@@ -78,7 +78,6 @@
 		}
 //----------------------------------------------------------------------
 		function fullReload() {
-				
 			forceList = 1;
 			for (i = 0; i < devices.length; i++) 
 				devices[i].inUse = 0;
@@ -103,8 +102,7 @@
 		function infoDevices () {
 			var htmlText = "";
 			for (i = 0; i < devices.length; i++) {
-				htmlText += "<tr><td>" //+ devices[i].grouptopic + "/" 
-							+ devices[i].topic + "</td><td>" + devices[i].devName + "</td></tr>" +
+				htmlText += "<tr><td>" + devices[i].topic + "</td><td>" + devices[i].devName + "</td></tr>" +
 							"<tr><td colspan=2><font size=2>S:" + devices[i].onstate + " L:" + devices[i].sleep + " V:" + devices[i].version +  
 							" W:" + devices[i].devHostName + "/" +  devices[i].ip + "(" + devices[i].dev + ")";
 				if (devices[i].type == 300)	
@@ -136,7 +134,6 @@
 					i  = ipSearchTo;
 				}
 			}	
-
 			if (devices.length > 0 ) {
 				if 	(forceList > 0 ) {
 					forceList		= 0;
@@ -191,7 +188,6 @@
 			}
 			findDeviceCount = 0;
 			searchCount = 300;
-			
 			for (var i = ipSearchFrom; i < ipSearchTo; i++) {
 				if (searchIp[i].inUse == 0 && (withOutput || searchIp[i].found < 2 || searchIp[i].found == 9)) {
 					searchCount += 1;
@@ -322,7 +318,6 @@
 		function getPower (i,cmnd) {
 			if (devices[i].inUse == 1) return;
 			devices[i].inUse = 1;
-//			devices[i].inUseFunction = "getPower";
 			
 			var pwrJSON = "http://" + ipBasis + devices[i].ip;
 			if (devices[i].type == 300)	{
@@ -338,7 +333,6 @@
 				if (fldEle) 
 					fldEle.style.backgroundColor 	= "Aquamarine";
 			}
-//			console.log (pwrJSON);
 			$.ajax({	url: 		pwrJSON,
 						dataType: 	'json',
 						async: 		true,
@@ -349,7 +343,6 @@
 				},		
 				success: function (data,status,xhr) {
 					devices[i].inUse = 0;
-//					console.log (JSON.stringify(data));
 					var sonPower = "OFF";
 					if (devices[this.devId].type == 300)	{
 						if (data.ison)
@@ -386,7 +379,6 @@
 					setPowerButton(this.devId);	
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
 					devices[this.devId].inUse = 0;
 
 					if (devices[this.devId].power != 9)
@@ -405,20 +397,12 @@
 		}
 //---------------------------------------------------------------------------------------------
 		function getSensor (i) {
-			if (!document)	return;
-
-			if (devices[i].inUse == 1) return;
+			if (!document)				return;
+			if (devices[i].inUse == 1) 	return;
 			devices[i].inUse = 1;
-//			devices[i].inUseFunction = "getSensor";
 			
 			var sensorJSON = "http://" + ipBasis + devices[i].ip + "/cm?" + ipPass + "cmnd=Status%208"
-/*			if (devices[i].sensor > 0)
-			{	var sensorId = "sensor" + i;
-				var sensorEle = document.getElementById(sensorId);
-				if (sensorEle) 
-					sensorEle.style.backgroundColor 	= "yellow";
-			}
-*/			$.ajax({	url: 		sensorJSON,
+			$.ajax({	url: 		sensorJSON,
 						dataType: 	'json',
 						async: 		true,
 						timeout: 	1000,
@@ -427,8 +411,6 @@
 					devices[this.devId].inUse = 0;
 				},		
 				success: function (data,status,xhr) {
-//					console.log (JSON.stringify(data));
-// ---------------
 					var nameId = "sensor" + this.devId;
 					var nameEle = document.getElementById(nameId);
 					if (nameEle) {
@@ -439,6 +421,17 @@
 						for(var key in data.StatusSNS) {
 							if 		(key == "Time")		sensorTime 		= data.StatusSNS[key];
 							else if (key == "TempUnit")	sensorTempUnit 	= data.StatusSNS[key];
+							else if (key == "AM2301" || key == "DHT11"  || key == "DS18B20" || key == "BMP280" )	{
+								var obj = data.StatusSNS[key];
+								if (obj) {
+									sensorData += " " + obj.Temperature + "°c ";
+									if (key == "AM2301" || key == "DHT11" )
+										sensorData += obj.Humidity + "H";
+									if (key == "BMP280" )
+										sensorData += obj.Pressure + "P";
+									hasData						= 1;
+								}
+							}	
 							else if (key == "TSL2561")	{
 								var obj = data.StatusSNS[key];
 								if (obj) {
@@ -455,19 +448,13 @@
 									}
 								}	
 							}
-	//					  console.log ("Key: " + key + " value: " + JSON.stringify(data.StatusSNS[key]));
 						}  
-//------------------------
 						if (hasData == 1) {
 							devices[this.devId].state 	= 6;
-						
 							nameEle.style.backgroundColor 	= "white";
 							nameEle.innerHTML 				= sensorData;
 						}
 					}
-				},
-				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
 				}
 			});
 		}
@@ -475,7 +462,6 @@
 		function getFriendlyName (i) {
 			if (devices[i].inUse == 1 || devices[i].dev < 2) return;
 			devices[i].inUse = 1;
-//			devices[i].inUseFunction = "getFriendlyName";
 			
 			var nameJSON = "http://" + ipBasis + devices[i].ip + "/cm?" + ipPass + "cmnd=FriendlyName" + devices[i].dev;
 			$.ajax({	url: 		nameJSON,
@@ -487,8 +473,6 @@
 					devices[this.devId].inUse = 0;
 				},		
 				success: function (data,status,xhr) {
-//					console.log (JSON.stringify(data));
-
 					var sData = "";
 					if (devices[this.devId].dev == 2) {
 						sData = data.FriendlyName2;
@@ -508,9 +492,6 @@
 								nameEle.innerHTML 				= sData;
 						}
 					}
-				},
-				error: function (jqXhr, textStatus, errorMessage) { // error callback 
-					//console.log ( textStatus + " Dev:" + this.devId + " " + errorMessage + JSON.stringify(devices[this.devId]));
 				}
 			});
 		}
@@ -525,6 +506,7 @@
 			else deviceUrl += "/cm?" + ipPass + "cmnd=Status%200";
 			
 			$.ajax({ 	url: 		deviceUrl,
+						mimeType: 	'text/plain; charset=x-user-defined',
 						dataType: 	'text',
 						async: 		true,
 						timeout: 	1000,
@@ -574,10 +556,8 @@
 							 searchIp[this.devIp].found = 1;
 						else searchIp[this.devIp].found = 5;
 					}	 
-		//			console.log("E:" + this.devIp + " " + searchIp[this.devIp].found + " " + errorMessage);
 					searchCount	-= 1;
 					if (this.withOutput == 1) {
-						// $('#stage').append("<tr><td>error " + this.devIp + ":" + errorMessage + "</td></tr>");
 						if (searchCount < 1) { 
 							$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
 							setTimeout(fullReload, 1500);
@@ -590,8 +570,7 @@
 		function setDevice (withOutput,to,name,tp,pw,os,sl,vr,hostname,ip,device,st) {
 			for (var i = 0; i < devices.length; i++ ) {
 				if (hostname == devices[i].devHostName && device == devices[i].dev)
-				{
-					if (withOutput == 1) {
+				{	if (withOutput == 1) {
 						var appendText = "<tr><td>Refresh: " + ip + "/" + device + " " + to + "/" + name + "</td></tr>";
 						$('#stage').append(appendText);
 					}
