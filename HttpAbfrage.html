@@ -55,8 +55,11 @@
 				var data = window.localStorage.getItem("SonoffDevices");
 				if (data)
 				{	devices = JSON.parse(data);
-					for (i = 0; i < devices.length; i++) 
+					for (i = 0; i < devices.length; i++) {
 						devices[i].inUse = 0;
+						if (devices[i].ip < searchIp.length) 
+							searchIp[devices[i].ip].found = 2;		
+					}	 	
 				}
 			}
 			if (devices.length < 1 )
@@ -86,10 +89,6 @@
 		function resetDevices() {
 			devices = [];
 			topics	= [];
-			for (i = 0; i < searchIp.length; i++)  {
-				searchIp[i].found = 0;
-				searchIp[i].inUse = 0;
-			}
 			findDevices(1);
 		}
 //----------------------------------------------------------------------
@@ -183,14 +182,18 @@
 		}
 //--------------------------------------------------------------------------------------		
 		function findDevices(withOutput) {
-			if (withOutput > 0) 
+			if (withOutput > 0) {
 				$('#stage').html("<tr><td>...suche </td></tr>");
-
+				for (i = ipSearchFrom; i < searchIp.length; i++)  {
+					searchIp[i].found = 0;
+					searchIp[i].inUse = 0;
+				}
+			}
 			findDeviceCount = 0;
 			searchCount = 300;
 			
 			for (var i = ipSearchFrom; i < ipSearchTo; i++) {
-				if (searchIp[i].inUse == 0 && (searchIp[i].found < 2 || searchIp[i].found == 9)) {
+				if (searchIp[i].inUse == 0 && (withOutput || searchIp[i].found < 2 || searchIp[i].found == 9)) {
 					searchCount += 1;
 					getDevice(i,withOutput);
 				}
@@ -534,35 +537,22 @@
 					if (data.startsWith('<body>')) {
 						searchIp[this.devIp].found = 5;
 					}
-					else if (data.startsWith('{"Status":')) {
+					else if (data.startsWith('{"Status":')) { // Sonoff 
 						searchIp[this.devIp].found = 2;
 						var sonoffDevice = JSON.parse(data);
 
-						if (this.withOutput == 1) {
-							var appendText = "<tr><td>Found: " + this.devIp + "/1 " + sonoffDevice.Status.Topic + "/" + sonoffDevice.Status.FriendlyName + "</td></tr>";
-							$('#stage').append(appendText);
-						}
-						setDevice (sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName,sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,1,1);
+						setDevice (this.withOutput,sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName,sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,1,1);
 
-						if (sonoffDevice.Status.Module == 29) {
-							if (this.withOutput == 1) {
-								var appendText = "<tr><td>Found: " + this.devIp + "/2 " + sonoffDevice.Status.Topic + "/" + sonoffDevice.Status.FriendlyName + "</td></tr>";
-								$('#stage').append(appendText);
-							}
-							setDevice (sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName + "*2",sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,2,0);
+						if (sonoffDevice.Status.Module == 29) { 
+							setDevice (this.withOutput,sonoffDevice.Status.Topic,sonoffDevice.Status.FriendlyName + "*2",sonoffDevice.Status.Module,sonoffDevice.Status.Power,sonoffDevice.Status.PowerOnState,sonoffDevice.StatusPRM.Sleep,sonoffDevice.StatusFWR.Version,sonoffDevice.StatusNET.Hostname,this.devIp,2,0);
 						}
 					}
-					else if (data.startsWith('{"device":')) {
+					else if (data.startsWith('{"device":')) { // Shelly
 						searchIp[this.devIp].found = 3;
 						var shellyDevice = JSON.parse(data);
 
-						for (idx = 0; idx < shellyDevice.relays.length; ++idx) 
-						{
-							if (this.withOutput == 1) {
-								var appendText = "<tr><td>Found: " + this.devIp + "/1" + shellyDevice.name  + "/" + shellyDevice.relays[idx].name  + "</td></tr>";
-								$('#stage').append(appendText);
-							}
-							setDevice (shellyDevice.name,shellyDevice.relays[idx].name,300,shellyDevice.relays[idx].ison,0,0,shellyDevice.device.type,shellyDevice.device.hostname,this.devIp,idx,1);
+						for (idx = 0; idx < shellyDevice.relays.length; ++idx) {
+							setDevice (this.withOutput,shellyDevice.name,shellyDevice.relays[idx].name,300,shellyDevice.relays[idx].ison,0,0,shellyDevice.device.type,shellyDevice.device.hostname,this.devIp,idx,1);
 						}	
 					}	
 					else {
@@ -570,10 +560,9 @@
 							 searchIp[this.devIp].found = 1;
 						else searchIp[this.devIp].found = 5;
 					}
-	//				console.log("S:" + this.devIp + " " + searchIp[this.devIp].found);
 					if (this.withOutput == 1 && searchCount < 1) {
 						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
-						setTimeout(fullReload, 800);
+						setTimeout(fullReload, 1500);
 					}	
 				},
 				error: function (jqXhr, textStatus, errorMessage) { // error callback 
@@ -587,44 +576,58 @@
 					}	 
 		//			console.log("E:" + this.devIp + " " + searchIp[this.devIp].found + " " + errorMessage);
 					searchCount	-= 1;
-					if (this.withOutput == 1 && searchCount < 1) {
-						$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
-						setTimeout(fullReload, 800);
+					if (this.withOutput == 1) {
+						// $('#stage').append("<tr><td>error " + this.devIp + ":" + errorMessage + "</td></tr>");
+						if (searchCount < 1) { 
+							$('#stage').append("<tr><td>finished....</td></tr><tr><td>" + menuFunction(1) + "</td></tr>");
+							setTimeout(fullReload, 1500);
+						}
 					}
 				}
 			});
 		}
 //-------------------------------------------------------------------
-		function setDevice (topic,name,type,power,os,sleep,version,hostname,ip,device,state) {
+		function setDevice (withOutput,to,name,tp,pw,os,sl,vr,hostname,ip,device,st) {
 			for (var i = 0; i < devices.length; i++ ) {
 				if (hostname == devices[i].devHostName && device == devices[i].dev)
 				{
+					if (withOutput == 1) {
+						var appendText = "<tr><td>Refresh: " + ip + "/" + device + " " + to + "/" + name + "</td></tr>";
+						$('#stage').append(appendText);
+					}
+					if (ip != devices[i].ip && ip < searchIp.length) {
+						searchIp[ip].found = 0;		
+					}	 	
 					devices[i].devName		=		name;
-					devices[i].type			=		type;
-					devices[i].power		=		power;
-					devices[i].topic		=		topic;
+					devices[i].type			=		tp;
+					devices[i].power		=		pw;
+					devices[i].topic		=		to;
 					devices[i].onstate		=		os;
-					devices[i].sleep		=		sleep;
-					devices[i].version		=		version;
+					devices[i].sleep		=		sl;
+					devices[i].version		=		vr;
 					devices[i].ip			=		ip;
 					devices[i].inUse		=		0;
-					devices[i].state		=		state;
+					devices[i].state		=		st;
 					return 0;
 				}
 			}
+			if (withOutput == 1) {
+				var appendText = "<tr><td>found: " + " " + ip + "/" + device + " " + to + "/" + name + "</td></tr>";
+				$('#stage').append(appendText);
+			}
 			devices.push({
 				devName: 		name,
-				type: 			type,
-				power:			power,
-				topic:			topic,
+				type: 			tp,
+				power:			pw,
+				topic:			to,
 				onstate:		os,
-				sleep:			sleep,
-				version:		version,
+				sleep:			sl,
+				version:		vr,
 				devHostName:	hostname,
 				ip:				ip,
 				dev:			device,
 				inUse:			0,
-				state:			state
+				state:			st
 			});	
 			forceList = 1;
 			return 1;
